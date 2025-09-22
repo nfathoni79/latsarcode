@@ -1,0 +1,6 @@
+@import "tailwindcss";
+
+@theme {
+  --width-screen-sm: var(--breakpoint-sm);
+  --color-latsar: #f3f7f8;
+}
