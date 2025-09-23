@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch, type Ref } from 'vue'
+import { onMounted, onUnmounted, ref, computed, watch, type Ref, type ComputedRef } from 'vue'
+import { useRoute } from 'vue-router'
+
+const route = useRoute()
 
 const imageName: Ref<string> = ref('')
 const imageLoading: Ref<boolean> = ref(true)
@@ -7,6 +10,11 @@ const imageExists: Ref<boolean> = ref(false)
 const message: Ref<string> = ref('')
 const timerText: Ref<string> = ref('')
 const interval: Ref<number | undefined> = ref(undefined)
+
+const wave: ComputedRef<number> = computed(() => {
+  imageLoading.value = true
+  return route.hash == '#g2' ? 2 : 3
+})
 
 watch(imageName, (newImage) => {
   imageLoading.value = true
@@ -79,7 +87,8 @@ const getImageName = (date: Date, suffix: string): string => {
   const dateStr: string = (date.getMonth() + 1).toString().padStart(2, '0') +
     date.getDate().toString().padStart(2, '0')
   
-  return dateStr + suffix
+  if (wave.value != 2) return dateStr + suffix
+  return 'x' + dateStr + suffix
 }
 
 const getHumanTimeDiff = (a: Date, b: Date): string => {
@@ -114,7 +123,19 @@ const checkIfImageExists = (url: string, callback: (exists: boolean) => void) =>
 <template>
   <div class="mx-auto max-w-screen-sm min-h-screen bg-latsar p-8 text-center">
 
-    <div v-if="!imageLoading && imageExists">
+    <nav class="flex items-center justify-evenly">
+      <RouterLink to="#g3"
+        :class="wave != 2 ? 'font-semibold border-b-2' : 'hover:text-gray-700'">
+        Gelombang 3
+      </RouterLink>
+
+      <RouterLink to="#g2"
+        :class="wave == 2 ? 'font-semibold border-b-2' : 'hover:text-gray-700'">
+        Gelombang 2
+      </RouterLink>
+    </nav>
+
+    <div v-if="!imageLoading && imageExists" class="mt-8">
       <p class="text-2xl font-bold uppercase">{{ message }}</p>
       <p class="text-xl font-semibold">{{ timerText }}</p>
 
