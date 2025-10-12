@@ -1,6 +1,11 @@
 /// <reference lib="webworker" />
 
+import { precacheAndRoute } from 'workbox-precaching'
+
 declare const self: ServiceWorkerGlobalScope
+
+// Required for VitePWA injectManifest
+precacheAndRoute(self.__WB_MANIFEST)
 
 // A simple service worker for caching (optional but good practice)
 const CACHE_NAME = 'latsar-code'
