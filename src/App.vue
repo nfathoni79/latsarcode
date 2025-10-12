@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, computed, watch, type Ref, type ComputedRef } from 'vue'
 import { useRoute } from 'vue-router'
+import api from './services'
 
 const route = useRoute()
 
@@ -10,9 +11,9 @@ const imageExists: Ref<boolean> = ref(false)
 const message: Ref<string> = ref('')
 const timerText: Ref<string> = ref('')
 const interval: Ref<number | undefined> = ref(undefined)
+const subscribed: Ref<boolean> = ref(false)
 
 const notificationPermission: Ref<number> = ref(0)
-const lastNotificationHour: Ref<number> = ref(-1)
 
 const wave: ComputedRef<number> = computed(() => {
   imageLoading.value = true
@@ -66,11 +67,6 @@ const updateDisplay = () => {
   // const now = new Date(new Date().getTime() - getTestDiff())
 
   const hours: number = now.getHours()
-  const minutes: number = now.getMinutes()
-  const seconds: number = now.getSeconds()
-
-  // Check for notification times
-  checkForNotificationTime(hours, minutes, seconds)
 
   if (hours >= 7 && hours < 16) {
     // 7 AM to 4 PM - show IN image for current date
@@ -157,6 +153,14 @@ const checkNotificationPermission = () => {
     return false
   }
 
+  const localSubscribed = localStorage.getItem('subscribed')
+  subscribed.value = localSubscribed === 'true'
+  
+  if (!subscribed.value) {
+    notificationPermission.value = 0
+    return false
+  }
+
   switch (Notification.permission) {
     case 'granted':
       notificationPermission.value = 1
@@ -173,11 +177,12 @@ const checkNotificationPermission = () => {
 const requestNotificationPermission = async () => {
   try {
     const permission = await Notification.requestPermission()
-    checkNotificationPermission()
 
     if (permission == 'granted') {
-      showNotification('Notifikasi Aktif', 'Kamu akan terima notifikasi di jam 7 dan 16')
+      await subscribeUser()
     }
+
+    checkNotificationPermission()
   } catch (error) {
     console.error('Error requesting notification permission:', error)
   }
@@ -189,7 +194,8 @@ const showNotification = (title: string, body: string) => {
   try {
     const notification = new Notification(title, {
       body: body,
-      tag: 'time-change',
+      icon: '/icon-192x192.png',
+      tag: 'daily-reminder',
       requireInteraction: true,
       silent: false,
     })
@@ -205,28 +211,50 @@ const showNotification = (title: string, body: string) => {
   }
 }
 
-const checkForNotificationTime = (hours: number, minutes: number, seconds: number) => {
-  // Only check at the exact minute (when seconds are 1-5 to account for timing)
-  if (imageLoading.value || !imageExists.value) return
-  if (seconds < 1 || seconds > 5) return
+const urlBase64ToUint8Array = (base64String: string) => {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding)
+    .replace(/\-/g, '+')
+    .replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray
+}
 
-  // Check for 7 AM (07:00)
-  if (hours == 7 && minutes == 0 && lastNotificationHour.value != 7) {
-    lastNotificationHour.value = 7
-    showNotification('Check-In', 'Waktunya Check-In!!')
+const subscribeUser = async () => {
+  const localSubscribed = localStorage.getItem('subscribed')
+  if (localSubscribed === 'true') return
+
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    console.warn('Push messaging is not supported.')
+    return
   }
 
-  // Check for 4 PM (16:00)
-  else if (hours == 16 && minutes == 0 && lastNotificationHour.value != 16) {
-    lastNotificationHour.value = 16
-    showNotification('Check-Out', 'Waktunya Check-Out!!')
-  }
+  try {
+    const registration = await navigator.serviceWorker.ready
 
-  // Reset notification tracking at different hours
-  else if (hours != 7 && hours != 16) {
-    if (lastNotificationHour.value == 7 || lastNotificationHour.value == 16) {
-      lastNotificationHour.value = -1
-    }
+    // Fetch VAPID Public Key from server
+    const response = await api.getVapidPublicKey()
+    const data = await response.json()
+    const applicationServerKey = urlBase64ToUint8Array(data.publicKey)
+
+    // Create the subscription
+    const subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: applicationServerKey,
+    })
+
+    // Send the subscription to your server
+    await api.createSubscription(subscription)
+    localStorage.setItem('subscribed', 'true')
+    subscribed.value = true
+
+    showNotification('Notifikasi Aktif', 'Kamu akan terima notifikasi di jam 7 dan 16')
+  } catch (error) {
+    console.error('Failed to subscribe the user:', error)
   }
 }
 </script>
